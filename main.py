@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+
+# run as: uvicorn main:app --host 0.0.0.0 --port PORT
+
 from __future__ import annotations
 
 import json
