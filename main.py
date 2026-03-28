@@ -10,6 +10,7 @@ import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
+import httpx
 
 import psycopg
 from dotenv import load_dotenv
@@ -24,6 +25,8 @@ logging.basicConfig(
 logger = logging.getLogger("owntracks_ingest")
 
 PSQL_URL = os.getenv("PSQL_URL", "").strip()
+RELAY_LOCATIONS = os.getenv("RELAY", "False").strip().lower() in ("1", "true", "yes")
+RELAY_ENDPOINT = os.getenv("RELAY_ENDPOINT", "http://192.168.0.170:8000/location").strip()
 
 if not PSQL_URL:
     raise RuntimeError("PSQL_URL is not set in the environment or .env")
@@ -278,5 +281,24 @@ async def owntracks_ingest(request: Request) -> Response:
             record["lon"],
             record["tst"],
         )
+    
+    if RELAY_LOCATIONS:
+        payload = {
+            "lat": record["lat"],
+            "lon": record["lon"],
+            "accuracy_m": record.get("acc"),
+            "source": "owntracks",
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    RELAY_ENDPOINT,
+                    json=payload,
+                    timeout=5.0,
+                )
+        except httpx.HTTPError as exc:
+            logger.warning("Failed to relay location to %s: %s", RELAY_ENDPOINT, exc)
+
 
     return Response(content="[]", media_type="application/json", status_code=200)
